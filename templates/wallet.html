@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wallet • FinSet</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+        :root {
+            --purple: #a855f7;
+            --purple-light: #c084fc;
+            --purple-dark: #7c3aed;
+            --green: #22c55e;
+            --red: #ef4444;
+            --bg: #f8fafc;
+            --sidebar-bg: #f1f5f9;
+        }
+        body { background: var(--bg); font-family: 'DM Sans', sans-serif; }
+        .sidebar { background: var(--sidebar-bg); min-height: 100vh; padding: 2rem 1.5rem; }
+        .nav-link { color: #64748b; border-radius: 10px; padding: 0.6rem 1rem; margin-bottom: 4px; font-weight: 500; transition: all 0.2s; }
+        .nav-link:hover { background: #e2e8f0; color: #1e293b; }
+        .nav-link.active { background: var(--purple); color: white !important; }
+        .nav-link i { margin-right: 8px; }
+        .card { border: none; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+
+        /* Card designs */
+        .wallet-card {
+            border-radius: 20px;
+            padding: 2rem;
+            color: white;
+            position: relative;
+            overflow: hidden;
+            min-height: 180px;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .wallet-card:hover { transform: translateY(-6px) rotate(-1deg); box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+        .wallet-card::before {
+            content: '';
+            position: absolute;
+            width: 200px; height: 200px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            top: -60px; right: -60px;
+        }
+        .wallet-card::after {
+            content: '';
+            position: absolute;
+            width: 140px; height: 140px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.07);
+            bottom: -40px; left: -20px;
+        }
+        .card-visa { background: linear-gradient(135deg, #a855f7, #7c3aed); }
+        .card-master { background: linear-gradient(135deg, #1e293b, #334155); }
+        .card-savings { background: linear-gradient(135deg, #0ea5e9, #0284c7); }
+        .card-number { font-family: 'DM Mono', monospace; letter-spacing: 3px; font-size: 1rem; }
+        .chip-icon { font-size: 2.5rem; opacity: 0.8; margin-bottom: 1rem; display: block; }
+
+        /* Quick action buttons */
+        .action-btn {
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            background: white; border: none; border-radius: 16px;
+            padding: 1.2rem; font-size: 0.8rem; font-weight: 600; color: #475569;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.06); cursor: pointer;
+            transition: all 0.2s; min-width: 90px;
+        }
+        .action-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(168,85,247,0.15); color: var(--purple); }
+        .action-btn i { font-size: 1.5rem; color: var(--purple); }
+
+        /* Account list */
+        .account-item {
+            display: flex; align-items: center; gap: 1rem;
+            padding: 1rem; border-radius: 12px; margin-bottom: 8px;
+            transition: background 0.2s; cursor: pointer;
+        }
+        .account-item:hover { background: #f8fafc; }
+        .account-icon {
+            width: 48px; height: 48px; border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem;
+        }
+
+        .stat-pill {
+            background: #f1f5f9; border-radius: 50px; padding: 4px 14px;
+            font-size: 0.78rem; font-weight: 600; color: #64748b;
+        }
+        .add-card-btn {
+            border: 2px dashed #cbd5e1; border-radius: 20px; min-height: 180px;
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column; gap: 8px; color: #94a3b8; cursor: pointer;
+            transition: all 0.2s; font-weight: 600;
+        }
+        .add-card-btn:hover { border-color: var(--purple); color: var(--purple); background: rgba(168,85,247,0.04); }
+    </style>
+</head>
+<body>
+<div class="d-flex">
+    <!-- Sidebar -->
+    <div class="col-md-2 sidebar">
+        <div class="d-flex align-items-center mb-4">
+            <i class="bi bi-piggy-bank fs-3" style="color:var(--purple)"></i>
+            <h4 class="ms-2 mb-0">FinSet</h4>
+        </div>
+        <ul class="nav flex-column">
+            <li class="nav-item"><a href="/dashboard" class="nav-link"><i class="bi bi-house"></i> Dashboard</a></li>
+            <li class="nav-item"><a href="/transactions" class="nav-link"><i class="bi bi-list"></i> Transactions</a></li>
+            <li class="nav-item"><a href="/wallet" class="nav-link active"><i class="bi bi-wallet"></i> Wallet</a></li>
+            <li class="nav-item"><a href="/goals" class="nav-link"><i class="bi bi-bullseye"></i> Goals</a></li>
+            <li class="nav-item"><a href="/budget" class="nav-link"><i class="bi bi-pie-chart"></i> Budget</a></li>
+            <li class="nav-item"><a href="/summary" class="nav-link"><i class="bi bi-graph-up"></i> Analytics</a></li>
+            <li class="nav-item"><a href="/settings" class="nav-link"><i class="bi bi-gear"></i> Settings</a></li>
+        </ul>
+        <div class="mt-4">
+            <a href="/logout" class="btn btn-outline-danger w-100"><i class="bi bi-box-arrow-right"></i> Logout</a>
+        </div>
+    </div>
+
+    <!-- Main -->
+    <div class="col-md-10 p-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h4 class="fw-bold mb-0">My Wallet</h4>
+                <small class="text-muted">Manage your cards & accounts</small>
+            </div>
+            <button class="btn btn-primary" style="background:var(--purple);border:none;border-radius:12px;">
+                <i class="bi bi-plus"></i> Add Card
+            </button>
+        </div>
+
+        <div class="row g-4">
+            <!-- Cards -->
+            <div class="col-lg-8">
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <div class="wallet-card card-visa">
+                            <i class="bi bi-sim chip-icon"></i>
+                            <div class="card-number mb-3">•••• •••• •••• 2154</div>
+                            <div class="d-flex justify-content-between align-items-end">
+                                <div>
+                                    <small style="opacity:0.7">Card Holder</small>
+                                    <div class="fw-bold">{{ user.email.split('@')[0].title() }}</div>
+                                </div>
+                                <div class="text-end">
+                                    <small style="opacity:0.7">Expires</small>
+                                    <div class="fw-bold">08/27</div>
+                                </div>
+                                <div style="font-size:1.8rem;font-weight:700;opacity:0.9">VISA</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="wallet-card card-master">
+                            <i class="bi bi-sim chip-icon"></i>
+                            <div class="card-number mb-3">•••• •••• •••• 8832</div>
+                            <div class="d-flex justify-content-between align-items-end">
+                                <div>
+                                    <small style="opacity:0.7">Card Holder</small>
+                                    <div class="fw-bold">{{ user.email.split('@')[0].title() }}</div>
+                                </div>
+                                <div class="text-end">
+                                    <small style="opacity:0.7">Expires</small>
+                                    <div class="fw-bold">03/26</div>
+                                </div>
+                                <div style="font-size:1.1rem;font-weight:700;opacity:0.9">MC</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="wallet-card card-savings">
+                            <i class="bi bi-bank chip-icon"></i>
+                            <div class="fw-bold mb-1" style="font-size:1.1rem">Savings Account</div>
+                            <div class="card-number mb-3" style="font-size:0.85rem">ACC •••• 4421</div>
+                            <div class="d-flex justify-content-between align-items-end">
+                                <div>
+                                    <small style="opacity:0.7">Balance</small>
+                                    <div class="fw-bold fs-5">$32,913.00</div>
+                                </div>
+                                <div><i class="bi bi-building" style="font-size:2rem;opacity:0.5"></i></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="add-card-btn" onclick="alert('Add new card')">
+                            <i class="bi bi-plus-circle" style="font-size:2.5rem"></i>
+                            <span>Add New Card</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="card p-3 mb-4">
+                    <h6 class="fw-bold mb-3">Quick Actions</h6>
+                    <div class="d-flex gap-3 flex-wrap">
+                        <button class="action-btn"><i class="bi bi-arrow-up-circle"></i>Send</button>
+                        <button class="action-btn"><i class="bi bi-arrow-down-circle"></i>Receive</button>
+                        <button class="action-btn"><i class="bi bi-arrow-left-right"></i>Transfer</button>
+                        <button class="action-btn"><i class="bi bi-phone"></i>Top Up</button>
+                        <button class="action-btn"><i class="bi bi-credit-card"></i>Pay Bill</button>
+                        <button class="action-btn"><i class="bi bi-three-dots"></i>More</button>
+                    </div>
+                </div>
+
+                <!-- Recent Card Activity -->
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="fw-bold mb-3">Card Activity</h6>
+                        <div id="activityList">
+                            {% set activities = [
+                                ('Spotify', 'bi-music-note', '#a855f7', '-$9.99', '2 hours ago'),
+                                ('Amazon', 'bi-bag', '#f59e0b', '-$67.50', 'Yesterday'),
+                                ('Salary Credit', 'bi-building', '#22c55e', '+$8,500.00', 'May 1'),
+                                ('Netflix', 'bi-play-circle', '#ef4444', '-$15.99', 'Apr 30'),
+                                ('Starbucks', 'bi-cup-hot', '#92400e', '-$6.75', 'Apr 29')
+                            ] %}
+                            {% for name, icon, color, amt, time in activities %}
+                            <div class="account-item">
+                                <div class="account-icon" style="background:{{ color }}20;">
+                                    <i class="{{ icon }}" style="color:{{ color }}"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold">{{ name }}</div>
+                                    <small class="text-muted">VISA •••• 2154 · {{ time }}</small>
+                                </div>
+                                <div class="fw-bold {% if '+' in amt %}text-success{% else %}text-danger{% endif %}">{{ amt }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel -->
+            <div class="col-lg-4">
+                <!-- Total Balance -->
+                <div class="card mb-4" style="background:linear-gradient(135deg,#a855f7,#7c3aed);color:white;">
+                    <div class="card-body p-4">
+                        <small style="opacity:0.8">Total Balance</small>
+                        <h2 class="fw-bold my-2">${{ "%.2f"|format(user.balance) }}</h2>
+                        <div class="d-flex gap-2">
+                            <span class="stat-pill" style="background:rgba(255,255,255,0.2);color:white;">3 Cards</span>
+                            <span class="stat-pill" style="background:rgba(255,255,255,0.2);color:white;">↑ 4.3%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Spending by Card -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h6 class="fw-bold mb-3">Spending by Card</h6>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="fw-semibold">VISA •••• 2154</small>
+                                <small class="text-muted">$3,200</small>
+                            </div>
+                            <div class="progress" style="height:8px;border-radius:10px;">
+                                <div class="progress-bar" style="width:68%;background:var(--purple);border-radius:10px;"></div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="fw-semibold">MC •••• 8832</small>
+                                <small class="text-muted">$1,450</small>
+                            </div>
+                            <div class="progress" style="height:8px;border-radius:10px;">
+                                <div class="progress-bar" style="width:31%;background:#64748b;border-radius:10px;"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="fw-semibold">Savings ACC</small>
+                                <small class="text-muted">$570</small>
+                            </div>
+                            <div class="progress" style="height:8px;border-radius:10px;">
+                                <div class="progress-bar" style="width:12%;background:#0ea5e9;border-radius:10px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Linked Banks -->
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="fw-bold mb-3">Linked Accounts</h6>
+                        {% set banks = [('Chase Bank', 'bi-building', '#1e40af', 'Checking • ••4421'),('Wells Fargo', 'bi-bank', '#dc2626', 'Savings • ••8821')] %}
+                        {% for bank, icon, color, sub in banks %}
+                        <div class="account-item">
+                            <div class="account-icon" style="background:{{ color }}20;">
+                                <i class="{{ icon }}" style="color:{{ color }}"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold">{{ bank }}</div>
+                                <small class="text-muted">{{ sub }}</small>
+                            </div>
+                            <span class="badge" style="background:#dcfce7;color:#16a34a;border-radius:8px;">Linked</span>
+                        </div>
+                        {% endfor %}
+                        <button class="btn w-100 mt-2" style="border:1.5px dashed #cbd5e1;border-radius:10px;color:#94a3b8;font-weight:600;">
+                            <i class="bi bi-plus"></i> Link Account
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

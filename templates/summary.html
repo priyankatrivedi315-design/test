@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Summary • FinSet</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #f8fafc; font-family: 'Segoe UI', sans-serif; }
+        .card { border: none; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        .summary-container { max-width: 1100px; margin: 40px auto; }
+        .chart-container { position: relative; height: 450px; }
+    </style>
+</head>
+<body class="container mt-5">
+    
+    <div class="summary-container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="bi bi-pie-chart-fill"></i> Expense Breakdown</h2>
+            <a href="/dashboard" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+
+        <div class="row">
+            <!-- Main Expenses Chart -->
+            <div class="col-lg-8">
+                <div class="card p-4">
+                    <h5 class="mb-4">Expenses by Category</h5>
+                    <div class="chart-container">
+                        <canvas id="expenseChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="col-lg-4">
+                <div class="card p-4 mb-4">
+                    <h5>Total Spent</h5>
+                    <h3 class="text-danger fw-bold">
+                        ${{ "%.2f"|format(values|sum if values else 0) }}
+                    </h3>
+                    <small class="text-muted">Across {{ values|length }} transactions</small>
+                </div>
+
+                <div class="card p-4">
+                    <h6 class="mb-3">Top Expenses</h6>
+                    <ul class="list-group list-group-flush">
+                        {% for label, value in (labels|zip(values))|sort(attribute='1', reverse=true)[:6] %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>{{ label }}</span>
+                            <strong class="text-danger">- ${{ "%.2f"|format(value) }}</strong>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const ctx = document.getElementById('expenseChart');
+    
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: {{ labels|tojson|safe }},
+            datasets: [{
+                data: {{ values|tojson|safe }},
+                backgroundColor: [
+                    '#a855f7', '#ef4444', '#f59e0b', '#22c55e',
+                    '#3b82f6', '#ec4899', '#14b8a6', '#8b5cf6',
+                    '#f97316', '#6366f1'
+                ],
+                borderWidth: 3,
+                borderColor: '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { 
+                        padding: 25, 
+                        font: { size: 14 },
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.raw / total) * 100).toFixed(1);
+                            return ` $${context.raw.toFixed(2)} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
