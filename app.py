@@ -12,11 +12,14 @@ import os
 # ================= APP =================
 app = Flask(__name__)
 
-app.secret_key = "secret123"
+app.secret_key = os.getenv("SECRET_KEY", "secret123")
 
 # ================= DATABASE CONFIG =================
 def build_database_uri():
-    return os.getenv("SQLALCHEMY_DATABASE_URI", "sqlite:///budget.db")
+    database_url = os.getenv("DATABASE_URL") or os.getenv("SQLALCHEMY_DATABASE_URI") or "sqlite:///budget.db"
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    return database_url
 
 
 app.config["SQLALCHEMY_DATABASE_URI"] = build_database_uri()
