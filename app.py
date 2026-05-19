@@ -8,33 +8,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
 import os
-from pathlib import Path
 
 # ================= APP =================
 app = Flask(__name__)
 
 app.secret_key = "secret123"
 
-INSTANCE_DIR = Path(app.instance_path)
-INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
-
 # ================= DATABASE CONFIG =================
-def normalize_database_url(database_url):
-    if database_url and database_url.startswith("postgres://"):
-        return database_url.replace("postgres://", "postgresql://", 1)
-    return database_url
-
-
-def build_database_uri():
-    database_url = normalize_database_url(os.getenv("DATABASE_URL"))
-    if database_url:
-        return database_url
-
-    sqlite_path = (INSTANCE_DIR / "budget.db").resolve().as_posix()
-    return f"sqlite:///{sqlite_path}"
-
-
-app.config["SQLALCHEMY_DATABASE_URI"] = build_database_uri()
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
+    "SQLALCHEMY_DATABASE_URI",
+    "sqlite:///budget.db",
+)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True
@@ -76,6 +60,9 @@ class Budget(db.Model):
     limit = db.Column(db.Float)
     color = db.Column(db.String(20), default="#a855f7")
 
+
+with app.app_context():
+    db.create_all()
 
 # ================= HELPERS =================
 def current_user():
@@ -281,7 +268,4 @@ def summary():
 
 # ================= RUN =================
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-
     app.run(host="0.0.0.0", port=5000)
