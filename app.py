@@ -14,19 +14,28 @@ from pathlib import Path
 app = Flask(__name__)
 
 app.secret_key = "secret123"
-os.makedirs(app.instance_path, exist_ok=True)
+
+INSTANCE_DIR = Path(app.instance_path)
+INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
 
 # ================= DATABASE CONFIG =================
-db_url = os.getenv("DATABASE_URL")
+def normalize_database_url(database_url):
+    if database_url and database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql://", 1)
+    return database_url
 
-# Railway PostgreSQL fix
-if db_url and db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-sqlite_path = Path(app.instance_path, "budget.db").resolve().as_posix()
-app.config["SQLALCHEMY_DATABASE_URI"] = db_url or f"sqlite:///{sqlite_path}"
+def build_database_uri():
+    database_url = normalize_database_url(os.getenv("DATABASE_URL"))
+    if database_url:
+        return database_url
+
+    sqlite_path = (INSTANCE_DIR / "budget.db").resolve().as_posix()
+    return f"sqlite:///{sqlite_path}"
+
+
+app.config["SQLALCHEMY_DATABASE_URI"] = build_database_uri()
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True
 }
