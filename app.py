@@ -15,10 +15,11 @@ app = Flask(__name__)
 app.secret_key = "secret123"
 
 # ================= DATABASE CONFIG =================
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
-    "SQLALCHEMY_DATABASE_URI",
-    "sqlite:///budget.db",
-)
+def build_database_uri():
+    return os.getenv("SQLALCHEMY_DATABASE_URI", "sqlite:///budget.db")
+
+
+app.config["SQLALCHEMY_DATABASE_URI"] = build_database_uri()
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True
