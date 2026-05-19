@@ -8,11 +8,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
 import os
+from pathlib import Path
 
 # ================= APP =================
 app = Flask(__name__)
 
 app.secret_key = "secret123"
+os.makedirs(app.instance_path, exist_ok=True)
 
 # ================= DATABASE CONFIG =================
 db_url = os.getenv("DATABASE_URL")
@@ -21,7 +23,8 @@ db_url = os.getenv("DATABASE_URL")
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = db_url or "sqlite:///budget.db"
+sqlite_path = Path(app.instance_path, "budget.db").resolve().as_posix()
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url or f"sqlite:///{sqlite_path}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
