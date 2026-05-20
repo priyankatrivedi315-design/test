@@ -1,275 +1,321 @@
-# =======================
-# BUDGET TRACKER (FLASK)
-# =======================
-
-from flask import Flask, render_template, request, redirect, session
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
-from functools import wraps
 import os
+import datetime
+import requests
 
-# ================= APP =================
-app = Flask(__name__)
+from flask import Flask, jsonify, request, send_from_directory
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-app.secret_key = os.getenv("SECRET_KEY", "secret123")
+app = Flask(__name__, static_folder="static")
 
-# ================= DATABASE CONFIG =================
-def build_database_uri():
-    database_url = os.getenv("DATABASE_URL") or os.getenv("SQLALCHEMY_DATABASE_URI") or "sqlite:///budget.db"
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
-    return database_url
+# =========================
+# API URLs
+# =========================
+GEO_URL = "https://geocoding-api.open-meteo.com/v1/search"
+WX_URL = "https://api.open-meteo.com/v1/forecast"
 
-
-app.config["SQLALCHEMY_DATABASE_URI"] = build_database_uri()
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_pre_ping": True
+# =========================
+# Weather Code Mapping
+# =========================
+WMO = {
+    0: ("Clear Sky", "sunny"),
+    1: ("Mainly Clear", "sunny"),
+    2: ("Partly Cloudy", "partly-cloudy"),
+    3: ("Overcast", "cloudy"),
+    45: ("Foggy", "cloudy"),
+    48: ("Foggy", "cloudy"),
+    51: ("Light Drizzle", "rainy"),
+    53: ("Drizzle", "rainy"),
+    55: ("Heavy Drizzle", "rainy"),
+    61: ("Rain", "rainy"),
+    63: ("Rain", "rainy"),
+    65: ("Heavy Rain", "rainy"),
+    71: ("Snow", "snowy"),
+    73: ("Snow", "snowy"),
+    75: ("Heavy Snow", "snowy"),
+    80: ("Rain Showers", "rainy"),
+    81: ("Rain Showers", "rainy"),
+    82: ("Heavy Rain Showers", "rainy"),
+    95: ("Thunderstorm", "stormy"),
 }
 
-db = SQLAlchemy(app)
+# =========================
+# Retry Session
+# =========================
+def make_session():
+    session = requests.Session()
 
-# ================= DATABASE MODELS =================
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(100), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    balance = db.Column(db.Float, default=35000)
+    retry = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504]
+    )
 
+    adapter = HTTPAdapter(max_retries=retry)
 
-class Expense(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, nullable=False)
-    title = db.Column(db.String(100), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
-    date = db.Column(db.String(50))
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
 
-
-class Goal(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer)
-    name = db.Column(db.String(100))
-    target = db.Column(db.Float)
-    saved = db.Column(db.Float, default=0)
-    deadline = db.Column(db.String(50))
-    category = db.Column(db.String(50))
-    completed = db.Column(db.Boolean, default=False)
+    return session
 
 
-class Budget(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer)
-    name = db.Column(db.String(100))
-    limit = db.Column(db.Float)
-    color = db.Column(db.String(20), default="#a855f7")
+# =========================
+# WMO Lookup
+# =========================
+def weather_lookup(code):
+    return WMO.get(int(code), ("Unknown", "sunny"))
 
 
-with app.app_context():
-    db.create_all()
+# =========================
+# Geocode
+# =========================
+def geocode(city):
+    session = make_session()
 
-# ================= HELPERS =================
-def current_user():
-    if "user_id" in session:
-        return User.query.get(session["user_id"])
-    return None
+    response = session.get(
+        GEO_URL,
+        params={
+            "name": city,
+            "count": 1,
+            "language": "en",
+            "format": "json"
+        },
+        timeout=15
+    )
+
+    response.raise_for_status()
+
+    results = response.json().get("results")
+
+    if not results:
+        return None
+
+    result = results[0]
+
+    return {
+        "lat": result["latitude"],
+        "lon": result["longitude"],
+        "city": result["name"],
+        "region": result.get("admin1", ""),
+        "country": result.get("country", ""),
+    }
 
 
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if "user_id" not in session:
-            return redirect("/")
-        return f(*args, **kwargs)
+# =========================
+# Search API
+# =========================
+@app.route("/api/search")
+def search():
 
-    return decorated_function
+    q = request.args.get("q", "").strip()
 
+    if not q:
+        return jsonify([])
 
-# ================= AUTH =================
-@app.route("/", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        email = request.form.get("email")
-        password = request.form.get("password")
+    session = make_session()
 
-        user = User.query.filter_by(email=email).first()
-
-        if user and check_password_hash(user.password, password):
-            session["user_id"] = user.id
-            return redirect("/dashboard")
-
-    return render_template("login.html")
-
-
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        email = request.form.get("email")
-        password = generate_password_hash(
-            request.form.get("password")
+    try:
+        response = session.get(
+            GEO_URL,
+            params={
+                "name": q,
+                "count": 6,
+                "language": "en",
+                "format": "json"
+            },
+            timeout=15
         )
 
-        # Check existing user
-        existing_user = User.query.filter_by(email=email).first()
+        response.raise_for_status()
 
-        if existing_user:
-            return redirect("/register")
+        results = response.json().get("results", [])
 
-        new_user = User(
-            email=email,
-            password=password
+        output = []
+
+        for r in results:
+            output.append({
+                "city": r["name"],
+                "admin1": r.get("admin1", ""),
+                "country": r.get("country", ""),
+                "country_code": r.get("country_code", ""),
+                "lat": r["latitude"],
+                "lon": r["longitude"],
+                "label": f"{r['name']}, {r.get('country', '')}"
+            })
+
+        return jsonify(output)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =========================
+# Weather API
+# =========================
+@app.route("/api/weather")
+def weather():
+
+    city = request.args.get("city", "New York")
+
+    lat = request.args.get("lat")
+    lon = request.args.get("lon")
+
+    try:
+
+        if lat and lon:
+            lat = float(lat)
+            lon = float(lon)
+
+            geo = {
+                "lat": lat,
+                "lon": lon,
+                "city": city,
+                "region": "",
+                "country": ""
+            }
+
+        else:
+            geo = geocode(city)
+
+            if not geo:
+                return jsonify({
+                    "error": "City not found"
+                }), 404
+
+        session = make_session()
+
+        response = session.get(
+            WX_URL,
+            params={
+                "latitude": geo["lat"],
+                "longitude": geo["lon"],
+
+                "current": [
+                    "temperature_2m",
+                    "apparent_temperature",
+                    "weather_code",
+                    "wind_speed_10m",
+                    "relative_humidity_2m",
+                    "surface_pressure"
+                ],
+
+                "hourly": [
+                    "temperature_2m",
+                    "weather_code"
+                ],
+
+                "daily": [
+                    "weather_code",
+                    "temperature_2m_max",
+                    "temperature_2m_min"
+                ],
+
+                "forecast_days": 15,
+                "timezone": "auto"
+            },
+            timeout=20
         )
 
-        db.session.add(new_user)
-        db.session.commit()
+        response.raise_for_status()
 
-        return redirect("/")
+        raw = response.json()
 
-    return render_template("register.html")
+        current = raw["current"]
 
+        code = current["weather_code"]
 
-@app.route("/logout")
-def logout():
-    session.pop("user_id", None)
-    return redirect("/")
+        description, condition = weather_lookup(code)
 
+        today = datetime.date.today()
 
-# ================= DASHBOARD =================
-@app.route("/dashboard", methods=["GET", "POST"])
-@login_required
-def dashboard():
-    user = current_user()
+        # =====================
+        # Hourly
+        # =====================
+        hourly = []
 
-    expenses = Expense.query.filter_by(
-        user_id=user.id
-    ).all()
+        hourly_times = raw["hourly"]["time"]
+        hourly_temps = raw["hourly"]["temperature_2m"]
+        hourly_codes = raw["hourly"]["weather_code"]
 
-    if request.method == "POST":
-        title = request.form.get("title")
-        amount = float(request.form.get("amount", 0))
+        for i in range(24):
 
-        date = datetime.now().strftime("%Y-%m-%d %H:%M")
+            t = hourly_times[i]
 
-        # Deduct balance
-        user.balance -= amount
+            hour = int(t[11:13])
 
-        expense = Expense(
-            user_id=user.id,
-            title=title,
-            amount=amount,
-            date=date
-        )
+            _, cond = weather_lookup(hourly_codes[i])
 
-        db.session.add(expense)
-        db.session.commit()
+            hourly.append({
+                "time": f"{hour}:00",
+                "temp": round(hourly_temps[i]),
+                "condition": cond,
+                "is_now": i == 0,
+                "is_past": False
+            })
 
-        return redirect("/dashboard")
+        # =====================
+        # Daily
+        # =====================
+        daily = []
 
-    total_spent = sum(exp.amount for exp in expenses)
+        for i in range(1, 15):
 
-    return render_template(
-        "dashboard.html",
-        user=user,
-        expenses=expenses,
-        total_spent=total_spent
-    )
+            date = today + datetime.timedelta(days=i)
 
+            _, cond = weather_lookup(
+                raw["daily"]["weather_code"][i]
+            )
 
-# ================= TRANSACTIONS =================
-@app.route("/transactions")
-@login_required
-def transactions():
-    user = current_user()
+            daily.append({
+                "day": date.strftime("%A"),
+                "date": date.strftime("%b %d"),
+                "date_key": date.strftime("%Y-%m-%d"),
+                "condition": cond,
+                "high": round(raw["daily"]["temperature_2m_max"][i]),
+                "low": round(raw["daily"]["temperature_2m_min"][i])
+            })
 
-    expenses = Expense.query.filter_by(
-        user_id=user.id
-    ).all()
+        return jsonify({
+            "location": f"{geo['city']}, {geo['country']}",
+            "temperature": round(current["temperature_2m"]),
+            "feels_like": round(current["apparent_temperature"]),
+            "description": description,
+            "condition": condition,
+            "wind": round(current["wind_speed_10m"]),
+            "humidity": round(current["relative_humidity_2m"]),
+            "pressure": round(current["surface_pressure"]),
+            "hourly": hourly,
+            "daily": daily,
+            "hourly_by_day": {}
+        })
 
-    return render_template(
-        "transactions.html",
-        user=user,
-        expenses=expenses
-    )
-
-
-# ================= WALLET =================
-@app.route("/wallet")
-@login_required
-def wallet():
-    user = current_user()
-
-    expenses = Expense.query.filter_by(
-        user_id=user.id
-    ).all()
-
-    return render_template(
-        "wallet.html",
-        user=user,
-        expenses=expenses
-    )
+    except Exception as e:
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 
-# ================= GOALS =================
-@app.route("/goals")
-@login_required
-def goals():
-    user = current_user()
-
-    goals = Goal.query.filter_by(
-        user_id=user.id
-    ).all()
-
-    return render_template(
-        "goals.html",
-        user=user,
-        goals=goals
-    )
+# =========================
+# Frontend
+# =========================
+@app.route("/")
+def home():
+    return send_from_directory("static", "index.html")
 
 
-# ================= BUDGET =================
-@app.route("/budget")
-@login_required
-def budget():
-    user = current_user()
-
-    expenses = Expense.query.filter_by(
-        user_id=user.id
-    ).all()
-
-    budgets = Budget.query.filter_by(
-        user_id=user.id
-    ).all()
-
-    return render_template(
-        "budget.html",
-        user=user,
-        expenses=expenses,
-        budgets=budgets
-    )
+# =========================
+# Health
+# =========================
+@app.route("/health")
+def health():
+    return jsonify({
+        "status": "ok"
+    })
 
 
-# ================= ANALYTICS =================
-@app.route("/summary")
-@login_required
-def summary():
-    user = current_user()
-
-    expenses = Expense.query.filter_by(
-        user_id=user.id
-    ).all()
-
-    labels = [expense.title for expense in expenses]
-    values = [expense.amount for expense in expenses]
-
-    return render_template(
-        "analytics.html",
-        user=user,
-        labels=labels,
-        values=values,
-        expenses=expenses
-    )
-
-
-# ================= RUN =================
+# =========================
+# Run
+# =========================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
